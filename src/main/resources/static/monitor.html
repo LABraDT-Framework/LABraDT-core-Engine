@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AAS Engine Monitor</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #1a1a1a; min-height: 100vh; padding: 24px; font-size: 14px; }
+  .header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 24px; }
+  h1 { font-size: 20px; font-weight: 600; }
+  .header-right { font-size: 12px; color: #9ca3af; }
+  .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #22c55e; margin-right: 5px; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; padding: 18px; }
+  .card-label { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; color: #9ca3af; text-transform: uppercase; margin-bottom: 10px; }
+  .metric { font-size: 32px; font-weight: 600; color: #1a1a1a; line-height: 1; }
+  .metric-sub { font-size: 12px; color: #aaa; margin-top: 4px; }
+  .state-badge { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; padding: 8px 14px; border-radius: 8px; }
+  .state-STABLE { color: #166534; background: #dcfce7; }
+  .state-INITIALIZING { color: #1e40af; background: #dbeafe; }
+  .state-SYNCHRONIZING { color: #92400e; background: #fef3c7; }
+  .state-DECIDING { color: #5b21b6; background: #ede9fe; }
+  .state-TRIGGERING { color: #991b1b; background: #fee2e2; }
+  .state-TERMINATING { color: #374151; background: #f3f4f6; }
+  .state-UNINITIALIZED { color: #6b7280; background: #f9fafb; }
+  .state-ERROR { color: #991b1b; background: #fee2e2; }
+  .state-OFFLINE { color: #991b1b; background: #fee2e2; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; display: inline-block; flex-shrink: 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: #9ca3af; text-transform: uppercase; padding: 0 0 10px; }
+  td { padding: 9px 0; border-top: 1px solid #f3f4f6; font-size: 13px; color: #374151; vertical-align: middle; }
+  td.ts-cell { color: #9ca3af; font-size: 12px; width: 155px; }
+  td.muted { color: #6b7280; }
+  td.strong { font-weight: 500; color: #1a1a1a; }
+  td.arrow-cell { color: #d1d5db; padding: 9px 8px; width: 20px; }
+  .pill { display: inline-block; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; }
+  .pill-green { background: #dcfce7; color: #166534; }
+  .pill-red { background: #fee2e2; color: #991b1b; }
+  .pill-blue { background: #dbeafe; color: #1e40af; }
+  .pill-amber { background: #fef3c7; color: #92400e; }
+  .pill-gray { background: #f3f4f6; color: #374151; }
+  .pill-purple { background: #ede9fe; color: #5b21b6; }
+  .empty-msg { font-size: 13px; color: #9ca3af; padding: 16px 0; }
+  .gw-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .gw-dot { width: 9px; height: 9px; border-radius: 50%; background: #d1d5db; flex-shrink: 0; }
+  .gw-dot.live { background: #22c55e; animation: pulse 2s infinite; }
+  .gw-dot.warn { background: #f59e0b; }
+  hr { border: none; border-top: 1px solid #f3f4f6; margin: 14px 0; }
+  .val-element { color: #5b21b6; font-weight: 500; }
+  .val-value { font-weight: 600; color: #1a1a1a; }
+  .new-row td { background: #f0fdf4; transition: background 2s; }
+  .section-title { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .db-badge { font-size: 10px; font-weight: 600; background: #dbeafe; color: #1e40af; padding: 2px 7px; border-radius: 10px; letter-spacing: 0.03em; }
+  .file-badge { font-size: 10px; font-weight: 600; background: #dcfce7; color: #166534; padding: 2px 7px; border-radius: 10px; letter-spacing: 0.03em; }
+  .file-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-top: 1px solid #f3f4f6; font-size: 13px; }
+  .file-item:first-child { border-top: none; }
+  .file-name { font-family: 'SF Mono', 'Courier New', monospace; font-size: 12px; color: #374151; }
+  .file-size { font-size: 11px; color: #9ca3af; }
+  .rule-card { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+  .rule-card:last-child { margin-bottom: 0; }
+  .rule-name { font-size: 12px; font-weight: 600; color: #374151; }
+  .rule-desc { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+  .rule-trigger-count { font-size: 20px; font-weight: 600; color: #1a1a1a; }
+  .rule-trigger-label { font-size: 10px; color: #9ca3af; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>AAS Engine Monitor</h1>
+    <div style="font-size:13px;color:#9ca3af;margin-top:3px;">ISW Stuttgart &mdash; CNC Milling Machine Digital Twin</div>
+  </div>
+  <div class="header-right">
+    <span class="live-dot"></span> auto-refreshing every 3s &nbsp;&nbsp;
+    <span id="last-refresh">—</span>
+  </div>
+</div>
+
+<div class="grid-4">
+  <div class="card">
+    <div class="card-label">Engine state</div>
+    <div id="state-badge" class="state-badge state-UNINITIALIZED">
+      <span class="dot"></span><span id="state-text">UNINITIALIZED</span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-label">Transitions logged</div>
+    <div class="metric" id="tx-count">—</div>
+    <div class="metric-sub">ENGINE_STATE table (H2)</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Data rows written</div>
+    <div class="metric" id="dw-count">—</div>
+    <div class="metric-sub">SUBMODEL_DATA table (H2)</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Services triggered</div>
+    <div class="metric" id="svc-count">0</div>
+    <div class="metric-sub">CONDITION_MET events</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-label">Gateway stream</div>
+    <div class="gw-row" style="margin-top:4px;">
+      <span class="gw-dot" id="gw-dot"></span>
+      <span id="gw-status" style="font-size:13px;color:#6b7280;">Checking...</span>
+    </div>
+    <div class="metric-sub" style="margin-top:6px;" id="gw-sub">—</div>
+    <hr/>
+    <div class="card-label">Latest value per element</div>
+    <table>
+      <thead><tr><th>Time</th><th>Element</th><th>Value</th></tr></thead>
+      <tbody id="data-table">
+        <tr><td colspan="3" class="empty-msg">Waiting for data...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Rules — write counts</div>
+    <div id="rules-panel">
+      <div class="rule-card">
+        <div>
+          <div class="rule-name">Rule_1 — Temperature</div>
+          <div class="rule-desc">greater_than 75.0 &rarr; cooling-service</div>
+        </div>
+        <div style="text-align:right">
+          <div class="rule-trigger-count" id="rule1-count">0</div>
+          <div class="rule-trigger-label">writes</div>
+        </div>
+      </div>
+      <div class="rule-card">
+        <div>
+          <div class="rule-name">Rule_2 — XAxisActualPosition</div>
+          <div class="rule-desc">greater_than 0.45m &rarr; geometry-correction-service</div>
+        </div>
+        <div style="text-align:right">
+          <div class="rule-trigger-count" id="rule2-count">0</div>
+          <div class="rule-trigger-label">writes</div>
+        </div>
+      </div>
+      <div class="rule-card">
+        <div>
+          <div class="rule-name">Rule_3 — XAxisLoad</div>
+          <div class="rule-desc">greater_than 30.0% &rarr; energy-monitoring-service</div>
+        </div>
+        <div style="text-align:right">
+          <div class="rule-trigger-count" id="rule3-count">0</div>
+          <div class="rule-trigger-label">writes</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="section-title">
+      State transition history
+      <span class="db-badge">H2 &middot; ENGINE_STATE</span>
+    </div>
+    <table>
+      <thead><tr><th>Timestamp</th><th>From</th><th></th><th>To</th><th>Trigger</th></tr></thead>
+      <tbody id="history-table">
+        <tr><td colspan="5" class="empty-msg">Waiting for transitions...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="section-title">
+      Submodel data writes
+      <span class="db-badge">H2 &middot; SUBMODEL_DATA</span>
+    </div>
+    <table>
+      <thead><tr><th>Timestamp</th><th>Submodel</th><th>Element</th><th>Value</th></tr></thead>
+      <tbody id="submodel-data-table">
+        <tr><td colspan="4" class="empty-msg">Waiting for data writes...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:12px;">
+  <div class="section-title">
+    File storage
+    <span class="file-badge">storage/</span>
+  </div>
+  <div id="file-list">
+    <div class="empty-msg">Polling file storage...</div>
+  </div>
+</div>
+
+<script>
+// The engine serves this page itself, so its own origin is the engine's address
+// (any port, any host, Docker too).
+const BASE = window.location.origin;
+let prevTransitions = [];
+let svcCount = 0;
+
+function triggerPill(trigger) {
+  if (!trigger) return '';
+  if (trigger.includes('CONDITION_MET') && !trigger.includes('NO')) return '<span class="pill pill-red">' + trigger + '</span>';
+  if (trigger.includes('NO_CONDITION')) return '<span class="pill pill-gray">' + trigger + '</span>';
+  if (trigger.includes('DATA_PUSH')) return '<span class="pill pill-blue">' + trigger + '</span>';
+  if (trigger.includes('SYNC')) return '<span class="pill pill-amber">' + trigger + '</span>';
+  if (trigger.includes('SERVICE')) return '<span class="pill pill-green">' + trigger + '</span>';
+  if (trigger.includes('STARTUP') || trigger.includes('READY')) return '<span class="pill pill-purple">' + trigger + '</span>';
+  return '<span class="pill pill-gray">' + trigger + '</span>';
+}
+
+async function fetchState() {
+  try {
+    const r = await fetch(BASE + '/engine/state');
+    const txt = await r.text();
+    const state = txt.split('|')[0].replace('Current state: ', '').trim();
+    document.getElementById('state-text').textContent = state;
+    document.getElementById('state-badge').className = 'state-badge state-' + state;
+
+    const dot = document.getElementById('gw-dot');
+    const status = document.getElementById('gw-status');
+    const sub = document.getElementById('gw-sub');
+
+    if (['STABLE','SYNCHRONIZING','DECIDING','TRIGGERING'].includes(state)) {
+      dot.className = 'gw-dot live';
+      status.textContent = 'Connected';
+      status.style.color = '#166534';
+      sub.textContent = 'Receiving updates from CNC machine';
+    } else if (state === 'UNINITIALIZED') {
+      dot.className = 'gw-dot';
+      status.textContent = 'Not started';
+      status.style.color = '#6b7280';
+      sub.textContent = 'Engine not running';
+    } else {
+      dot.className = 'gw-dot warn';
+      status.textContent = 'Engine offline';
+      status.style.color = '#991b1b';
+      sub.textContent = 'Start the Spring Boot application';
+    }
+  } catch(e) {
+    document.getElementById('state-text').textContent = 'OFFLINE';
+    document.getElementById('state-badge').className = 'state-badge state-OFFLINE';
+    document.getElementById('gw-dot').className = 'gw-dot warn';
+    document.getElementById('gw-status').textContent = 'Engine offline';
+    document.getElementById('gw-status').style.color = '#991b1b';
+    document.getElementById('gw-sub').textContent = 'Start the Spring Boot application';
+  }
+}
+
+async function fetchHistory() {
+  try {
+    const r = await fetch(BASE + '/engine/history');
+    const txt = await r.text();
+    const lines = txt.split('\n').filter(function(l) { return l.trim().startsWith('['); });
+    document.getElementById('tx-count').textContent = lines.length || '0';
+
+    var newSvc = 0;
+    lines.forEach(function(l) {
+      if (l.includes('CONDITION_MET') && !l.includes('NO_CONDITION')) newSvc++;
+    });
+    if (newSvc > svcCount) svcCount = newSvc;
+    document.getElementById('svc-count').textContent = svcCount;
+
+    const tbody = document.getElementById('history-table');
+    if (lines.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">Waiting for transitions...</td></tr>';
+      return;
+    }
+
+    const newKeys = lines.map(function(l) { return l.substring(0, 30); }).join('|');
+    const oldKeys = prevTransitions.join('|');
+    if (newKeys === oldKeys) return;
+    prevTransitions = lines.map(function(l) { return l.substring(0, 30); });
+
+    tbody.innerHTML = lines.map(function(line, i) {
+      const m = line.match(/\[([^\]]+)\]\s+(\w+)\s+--(\w+)-->\s+(\w+)/);
+      if (!m) return '';
+      const ts = m[1], from = m[2], trigger = m[3], to = m[4];
+      const cleanTs = ts.substring(0,19).replace('T',' ');
+      return '<tr class="' + (i===0?'new-row':'') + '">'
+        + '<td class="ts-cell">' + cleanTs + '</td>'
+        + '<td class="muted">' + from + '</td>'
+        + '<td class="arrow-cell">→</td>'
+        + '<td class="strong">' + to + '</td>'
+        + '<td>' + triggerPill(trigger) + '</td>'
+        + '</tr>';
+    }).join('');
+
+    setTimeout(function() {
+      document.querySelectorAll('.new-row td').forEach(function(td) { td.style.background = ''; });
+    }, 2000);
+  } catch(e) {}
+}
+
+async function fetchSubmodelData() {
+  try {
+    const r = await fetch(BASE + '/engine/submodel-data');
+    if (!r.ok) {
+      document.getElementById('dw-count').textContent = '—';
+      return;
+    }
+    const txt = await r.text();
+
+    const lines = txt.split('\n').filter(function(l) { return l.includes('CPS_SM.'); });
+    document.getElementById('dw-count').textContent = lines.length || '0';
+
+    const tbody = document.getElementById('submodel-data-table');
+    if (lines.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-msg">No data written yet</td></tr>';
+    } else {
+      tbody.innerHTML = lines.slice(0, 8).map(function(line, i) {
+        const m = line.match(/\[([^\]]+)\]\s+(\S+)\.(\S+)\s*=\s*(.+)/);
+        if (!m) return '';
+        const ts = m[1], submodelId = m[2], elementId = m[3], value = m[4];
+        const cleanTs = ts.substring(0, 19).replace('T', ' ');
+        return '<tr class="' + (i===0?'new-row':'') + '">'
+          + '<td class="ts-cell">' + cleanTs + '</td>'
+          + '<td class="muted">' + submodelId + '</td>'
+          + '<td class="val-element">' + elementId + '</td>'
+          + '<td class="val-value">' + value.trim() + '</td>'
+          + '</tr>';
+      }).join('');
+
+      setTimeout(function() {
+        document.querySelectorAll('.new-row td').forEach(function(td) { td.style.background = ''; });
+      }, 2000);
+    }
+
+    const latestByElement = {};
+    lines.forEach(function(line) {
+      const m = line.match(/\[([^\]]+)\]\s+\S+\.(\S+)\s*=\s*(.+)/);
+      if (!m) return;
+      const ts = m[1], elementId = m[2], value = m[3];
+      if (!latestByElement[elementId]) {
+        latestByElement[elementId] = { ts: ts.substring(11, 19), elementId: elementId, value: value.trim() };
+      }
+    });
+
+    const tbody2 = document.getElementById('data-table');
+    const liveRows = Object.values(latestByElement);
+    if (liveRows.length > 0) {
+      tbody2.innerHTML = liveRows.map(function(row, i) {
+        return '<tr class="' + (i===0?'new-row':'') + '">'
+          + '<td class="ts-cell">' + row.ts + '</td>'
+          + '<td class="val-element">' + row.elementId + '</td>'
+          + '<td class="val-value">' + row.value + '</td>'
+          + '</tr>';
+      }).join('');
+      setTimeout(function() {
+        document.querySelectorAll('.new-row td').forEach(function(td) { td.style.background = ''; });
+      }, 2000);
+    }
+
+    var r1 = 0, r2 = 0, r3 = 0;
+    lines.forEach(function(l) {
+      if (l.includes('.Temperature')) r1++;
+      if (l.includes('.XAxisActualPosition')) r2++;
+      if (l.includes('.XAxisLoad')) r3++;
+    });
+    document.getElementById('rule1-count').textContent = r1;
+    document.getElementById('rule2-count').textContent = r2;
+    document.getElementById('rule3-count').textContent = r3;
+
+  } catch(e) {
+    document.getElementById('dw-count').textContent = '—';
+  }
+}
+
+async function fetchFileStorage() {
+  try {
+    const r = await fetch(BASE + '/engine/storage');
+    if (!r.ok) {
+      document.getElementById('file-list').innerHTML = '<div class="empty-msg">Storage endpoint not available</div>';
+      return;
+    }
+    const txt = await r.text();
+    const lines = txt.split('\n').filter(function(l) { return l.trim().length > 0; });
+    if (lines.length === 0) {
+      document.getElementById('file-list').innerHTML = '<div class="empty-msg">No files written yet</div>';
+      return;
+    }
+    document.getElementById('file-list').innerHTML = lines.map(function(line) {
+      const parts = line.split('|');
+      const name = parts[0] ? parts[0].trim() : line.trim();
+      const size = parts[1] ? parts[1].trim() : '';
+      return '<div class="file-item"><span class="file-name">' + name + '</span><span class="file-size">' + size + '</span></div>';
+    }).join('');
+  } catch(e) {
+    document.getElementById('file-list').innerHTML = '<div class="empty-msg">Storage endpoint not available</div>';
+  }
+}
+
+async function refresh() {
+  await fetchState();
+  await fetchHistory();
+  await fetchSubmodelData();
+  await fetchFileStorage();
+  document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+}
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>
